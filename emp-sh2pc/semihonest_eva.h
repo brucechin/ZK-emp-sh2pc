@@ -10,7 +10,7 @@ public:
 	IO* io = nullptr;
 	SHOTExtension<IO>* ot;
 	HalfGateEva<IO> * gc;
-	PRG shared_prg;
+	PRG shared_prg; //shared_prg
 	SemiHonestEva(IO *io, HalfGateEva<IO> * gc): ProtocolExecution(BOB) {
 		this->io = io;
 		ot = new SHOTExtension<IO>(io);
@@ -28,6 +28,12 @@ public:
 		} else {
 			ot->recv_cot(label, b, length);
 		}
+	}
+
+	void finalize() override {
+            //TODO 1. run GC and get Z'
+            // commit Z'
+            // verify GC with {K_0_i, K_1_0} i <-[n] if accept, commit (reveal, 1), if not abort protocol
 	}
 
 	void reveal(bool * b, int party, const block * label, int length) {

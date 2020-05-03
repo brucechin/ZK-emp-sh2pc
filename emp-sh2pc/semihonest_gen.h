@@ -5,14 +5,34 @@
 #include <iostream>
 
 namespace emp {
+
+template<typename IO>
+//Verifier generates GC and sends GC to prover for execution and get the result back for comparison
+class SemiHonestVerifier: public ProtocolExecution{
+public:
+  IO* io;
+  SHOTExtension<IO> * ot;
+  PRG prg, shared_prg;
+  HalfGateGen<IO> * gc;
+  SemiHonestVerifier(IO* io, HalfGateGen<IO>* gc): ProtocolExecution(ALICE){
+
+  }
+
+  ~SemiHonestVerifier(){
+    delete ot;
+  }
+
+
+};
+
 template<typename IO>
 class SemiHonestGen: public ProtocolExecution {
 public:
 	IO* io;
 	SHOTExtension<IO> * ot;
 	PRG prg, shared_prg;
-	HalfGateGen<IO> * gc;
-	SemiHonestGen(IO* io, HalfGateGen<IO>* gc): ProtocolExecution(ALICE) {
+	PrivacyFreeGen<IO> * gc;
+	SemiHonestGen(IO* io, PrivacyFreeGen<IO>* gc): ProtocolExecution(ALICE) {
 		this->io = io;
 		ot = new SHOTExtension<IO>(io);
 		this->gc = gc;	
@@ -23,7 +43,7 @@ public:
 	~SemiHonestGen() {
 		delete ot;
 	}
-
+        //b是选择1-out-of-2 OT的东西，
 	void feed(block * label, int party, const bool* b, int length) {
 		if(party == ALICE) {
 			shared_prg.random_block(label, length);
@@ -35,6 +55,11 @@ public:
 			ot->send_cot(label, gc->delta, length);
 		}
 	}
+
+        void finalize() override {
+            //TODO 1. after Prover commits Z', SEND (open-all) to F_cot, F_cot send (transfer, i , K_i_0, K_i_1) to Prover
+            // 2. When verifier receives reveal from F_com, output accept if Z == Z'
+        }
 
 	void reveal(bool* b, int party, const block * label, int length) {
 		if (party == XOR) {
