@@ -5,72 +5,72 @@
 #include <iostream>
 
 namespace emp {
-
-template<typename IO>
 //Verifier generates GC and sends GC to prover for execution and get the result back for comparison
-class SemiHonestVerifier: public ProtocolExecution{
+template<typename IO> class ZKHonestVerifier : public ProtocolExecution {
 public:
-  IO* io;
-  SHOTExtension<IO> * ot;
+  IO *io;
+  SHOTExtension<IO> *ot;
   PRG prg, shared_prg;
-  HalfGateGen<IO> * gc;
-  SemiHonestVerifier(IO* io, HalfGateGen<IO>* gc): ProtocolExecution(ALICE){
+  PrivacyFreeGen<IO> *gc;
+  //	Bit* w;//TODO any better type to store {K_1_i, K_0_i}?
+  //	int w_len;
+  Commitment c;
+  Com com;
+  Decom decom;
+  ZKHonestVerifier(IO *io, PrivacyFreeGen<IO> *gc) : ProtocolExecution(ALICE) {
+    this->io = io;
+    ot = new SHOTExtension<IO>(io);
+    this->gc = gc;
+    block seed;
+    prg.random_block(&seed, 1);
+    io->send_block(&seed, 1);
+    shared_prg.reseed(&seed);
+  }
+  ~ZKHonestVerifier() { delete ot; }
 
+  void feed(block *label, int party, const bool *b, int length) {
+    if (party == ALICE) {
+      // ALICE party shall not input data.
+      printf("ALICE/prover party shall not input data.");
+      //			shared_prg.random_block(label, length);
+      //			for (int i = 0; i < length; ++i) {
+      //				if(b[i])
+      //					label[i] = xorBlocks(label[i],
+      //gc->delta);
+      //			}
+    } else {
+      ot->send_cot(label, gc->delta, length);
+    }
   }
 
-  ~SemiHonestVerifier(){
-    delete ot;
+  // receive the committed value and compare it with desiredValue to finish the
+  // proof process.
+  bool receiveCommit(block *label, int party, int len, block *desiredValue) {
+    if (party == BOB) {
+      io->recv_block(&com, sizeof(com));
+      // TODO 9. V sends the message (open-all) to the F_COT functionality;
+
+      // TODO sends all the {K_1_i, K_0_i} i<-[n] to prover
+
+      io->recv_block(&decom, sizeof(decom));
+
+      // compare Z' and Z(desiredValue and output from prover)
+      return c.open(decom, com, desiredValue, sizeof(block));
+    } else {
+      // ALICE does not receive the committed message
+    }
   }
 
-
-};
-
-template<typename IO>
-class SemiHonestGen: public ProtocolExecution {
-public:
-	IO* io;
-	SHOTExtension<IO> * ot;
-	PRG prg, shared_prg;
-	PrivacyFreeGen<IO> * gc;
-	SemiHonestGen(IO* io, PrivacyFreeGen<IO>* gc): ProtocolExecution(ALICE) {
-		this->io = io;
-		ot = new SHOTExtension<IO>(io);
-		this->gc = gc;	
-		block seed;prg.random_block(&seed, 1);
-		io->send_block(&seed, 1);
-		shared_prg.reseed(&seed);
-	}
-	~SemiHonestGen() {
-		delete ot;
-	}
-        //b是选择1-out-of-2 OT的东西，
-	void feed(block * label, int party, const bool* b, int length) {
-		if(party == ALICE) {
-			shared_prg.random_block(label, length);
-			for (int i = 0; i < length; ++i) {
-				if(b[i])
-					label[i] = xorBlocks(label[i], gc->delta);
-			}
-		} else {
-			ot->send_cot(label, gc->delta, length);
-		}
-	}
-
-        void finalize() override {
-            //TODO 1. after Prover commits Z', SEND (open-all) to F_cot, F_cot send (transfer, i , K_i_0, K_i_1) to Prover
-            // 2. When verifier receives reveal from F_com, output accept if Z == Z'
-        }
-
-	void reveal(bool* b, int party, const block * label, int length) {
-		if (party == XOR) {
-			for (int i = 0; i < length; ++i) {
-				if(isOne(&label[i]) or isZero(&label[i]))
-					b[i] = false;
-				else 
-					b[i] = getLSB(label[i]);
-			}
-			return;
-		}
+  void reveal(bool *b, int party, const block *label, int length) {
+    if (party == XOR) {
+      for (int i = 0; i < length; ++i) {
+        if (isOne(&label[i]) or isZero(&label[i]))
+          b[i] = false;
+        else
+          b[i] = getLSB(label[i]);
+      }
+      return;
+    }
 		for (int i = 0; i < length; ++i) {
 			if(isOne(&label[i]))
 				b[i] = true;
