@@ -10,21 +10,17 @@ template<typename IO> class ZKHonestVerifier : public ProtocolExecution {
 public:
   IO *io;
   SHOTExtension<IO> *ot;
-  PRG prg, shared_prg;
+  PRG prg;
   PrivacyFreeGen<IO> *gc;
-  //	Bit* w;//TODO any better type to store {K_1_i, K_0_i}?
-  //	int w_len;
   Commitment c;
   Com com;
   Decom decom;
+  block seed;
   ZKHonestVerifier(IO *io, PrivacyFreeGen<IO> *gc) : ProtocolExecution(ALICE) {
     this->io = io;
     ot = new SHOTExtension<IO>(io);
     this->gc = gc;
-    block seed;
     prg.random_block(&seed, 1);
-    io->send_block(&seed, 1);
-    shared_prg.reseed(&seed);
   }
   ~ZKHonestVerifier() { delete ot; }
 
@@ -39,7 +35,13 @@ public:
       //gc->delta);
       //			}
     } else {
-      ot->send_cot(label, gc->delta, length);
+      // label没有初始化，cot会初始化random的值。应该换成send_ot，用一个prg生成random值再发过去。还有一个array是xor
+      // delta之后的
+      block *label1 = new block[length];
+      for (int i = 0; i < length; i++) {
+        label1[i] = xorBlocks(label[i], gc->delta);
+      }
+      ot->send_rot(label, label1, length);
     }
   }
 
@@ -61,36 +63,7 @@ public:
     }
   }
 
-  void reveal(bool *b, int party, const block *label, int length) {
-    if (party == XOR) {
-      for (int i = 0; i < length; ++i) {
-        if (isOne(&label[i]) or isZero(&label[i]))
-          b[i] = false;
-        else
-          b[i] = getLSB(label[i]);
-      }
-      return;
-    }
-		for (int i = 0; i < length; ++i) {
-			if(isOne(&label[i]))
-				b[i] = true;
-			else if (isZero(&label[i]))
-				b[i] = false;
-			else {
-				bool lsb = getLSB(label[i]);
-				if (party == BOB or party == PUBLIC) {
-					io->send_data(&lsb, 1);
-					b[i] = false;
-				} else if(party == ALICE) {
-					bool tmp;
-					io->recv_data(&tmp, 1);
-					b[i] = (tmp != lsb);
-				}
-			}
-		}
-		if(party == PUBLIC)
-			io->recv_data(b, length);
-	}
+  bool prepareVerify() { io->send_block(&seed, 1); }
 };
 }
 #endif //SEMIHONEST_GEN_H__
