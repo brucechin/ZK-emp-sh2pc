@@ -16,6 +16,8 @@ public:
   Com com;
   Decom decom;
   block seed;
+  //TODO save all labels during feed() for later verification(rerun the circuits at evaluator)
+  vector<block> label_saved;
   ZKHonestVerifier(IO *io, PrivacyFreeGen<IO> *gc) : ProtocolExecution(ALICE) {
     this->io = io;
     ot = new SHOTExtension<IO>(io);
@@ -51,9 +53,7 @@ public:
     if (party == BOB) {
       io->recv_block(&com, sizeof(com));
       // TODO 9. V sends the message (open-all) to the F_COT functionality;
-
-      // TODO sends all the {K_1_i, K_0_i} i<-[n] to prover
-
+      prepareVerify();
       io->recv_block(&decom, sizeof(decom));
 
       // compare Z' and Z(desiredValue and output from prover)
@@ -63,7 +63,10 @@ public:
     }
   }
 
-  bool prepareVerify() { io->send_block(&seed, 1); }
+  bool prepareVerify() {
+    //TODO send labels to evaluator for verification
+    io->send_block(&seed, 1);
+  }
 };
 }
 #endif //SEMIHONEST_GEN_H__
