@@ -15,6 +15,7 @@ public:
   Commitment c;
   Com com;
   Decom decom;
+  //TODO seed is actually not used in generator side.
   block seed;
   //TODO save all labels during feed() for later verification(rerun the circuits at evaluator)
   vector<block> label_saved;
@@ -37,12 +38,11 @@ public:
       //gc->delta);
       //			}
     } else {
-      // label没有初始化，cot会初始化random的值。应该换成send_ot，用一个prg生成random值再发过去。还有一个array是xor
-      // delta之后的
       block *label1 = new block[length];
       for (int i = 0; i < length; i++) {
         label1[i] = xorBlocks(label[i], gc->delta);
       }
+      //TODO save label and label1 for sending to evaluator to rerun the circuits
       ot->send_rot(label, label1, length);
     }
   }

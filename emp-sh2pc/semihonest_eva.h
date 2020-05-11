@@ -16,7 +16,7 @@ class ZKPrivacyFreeEva:public CircuitExecution{ public:
   T * io;
   block constant[2];
   int64_t gid = 0;
-  vector<vector<uint64_t >> circuits;//record circuit structure
+  vector<vector<uint64_t >> circuits;//record circuit structure in the order of execution
   ZKPrivacyFreeEva(T * io) :io(io) {
     PRG prg2(fix_key);prg2.random_block(constant, 2);
     *((char *) &constant[0]) &= 0xfe;
@@ -34,7 +34,6 @@ class ZKPrivacyFreeEva:public CircuitExecution{ public:
     block out[2], table[1];
     io->recv_block(table, 1);
     garble_gate_eval_privacy_free(a, b, out, table, gid++, &prp.aes);
-
     //record the circuit structure for later verification
     uint64_t *arr = (uint64_t*) &out;
     vector<uint64_t > tmp = {arr_a[1], arr_b[1], arr[1], OP_AND};
@@ -49,17 +48,17 @@ class ZKPrivacyFreeEva:public CircuitExecution{ public:
     //todo record the circuit structure
     return xor_gate(a, public_label(true));
   }
-  void privacy_free_to_xor(block* new_block, const block * old_block, const bool* b, int length){
-    block h[2];
-    for(int i = 0; i < length; ++i) {
-      io->recv_block(h, 2);
-      if(!b[i]){
-        new_block[i] = xorBlocks(h[0], prp.H(old_block[i], i));
-      } else {
-        new_block[i] = xorBlocks(h[1], prp.H(old_block[i], i));
-      }
-    }
-  }
+//  void privacy_free_to_xor(block* new_block, const block * old_block, const bool* b, int length){
+//    block h[2];
+//    for(int i = 0; i < length; ++i) {
+//      io->recv_block(h, 2);
+//      if(!b[i]){
+//        new_block[i] = xorBlocks(h[0], prp.H(old_block[i], i));
+//      } else {
+//        new_block[i] = xorBlocks(h[1], prp.H(old_block[i], i));
+//      }
+//    }
+//  }
 };
 
 template<typename IO> class ZKHonestProver : public ProtocolExecution {
@@ -132,6 +131,7 @@ public:
 //    }
 //    memcpy(out, &wires[num_wire-n3], n3*sizeof(block));
 //  }
+//TODO compare out with output
 };
 }
 
