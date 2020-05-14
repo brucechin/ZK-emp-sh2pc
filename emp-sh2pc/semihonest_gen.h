@@ -15,7 +15,6 @@ public:
   Commitment c;
   Com com;
   Decom decom;
-  //TODO seed is actually not used in generator side.
   block seed;
   //TODO save all labels during feed() for later verification(rerun the circuits at evaluator)
   vector<block> label_saved;
@@ -38,12 +37,20 @@ public:
       //gc->delta);
       //			}
     } else {
+      prg.random_block(label, length);
       block *label1 = new block[length];
       for (int i = 0; i < length; i++) {
         label1[i] = xorBlocks(label[i], gc->delta);
       }
       //TODO save label and label1 for sending to evaluator to rerun the circuits
-      ot->send_rot(label, label1, length);
+      ot->send(label, label1, length);
+      //        ot->send()
+      //	void send(const block* data0, const block* data1, int length) {
+      //		static_cast<T*>(this)->send_impl(data0, data1, length);
+      //	}
+      //	void recv(block* data, const bool* b, int length) {
+      //		static_cast<T*>(this)->recv_impl(data, b, length);
+      //	}
     }
   }
 

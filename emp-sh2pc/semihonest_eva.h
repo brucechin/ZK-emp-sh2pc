@@ -16,11 +16,17 @@ class ZKPrivacyFreeEva:public CircuitExecution{ public:
   T * io;
   block constant[2];
   int64_t gid = 0;
-  vector<vector<uint64_t >> circuits;//record circuit structure in the order of execution
+  Hash hash;
+  char dig[Hash::DIGEST_SIZE];
+  //vector<vector<uint64_t >> circuits;//record circuit structure in the order of execution
   ZKPrivacyFreeEva(T * io) :io(io) {
     PRG prg2(fix_key);prg2.random_block(constant, 2);
     *((char *) &constant[0]) &= 0xfe;
     *((char *) &constant[1]) |= 0x01;
+    char * data = new char[1024*1024];
+    hash.put(data, 1024*1024);
+    hash.digest(dig);
+    delete[] data;
   }
   bool is_public(const block & b, int party) {
     return false;
@@ -33,19 +39,23 @@ class ZKPrivacyFreeEva:public CircuitExecution{ public:
     uint64_t *arr_b = (uint64_t*) &b;
     block out[2], table[1];
     io->recv_block(table, 1);
+    //直接hash table
     garble_gate_eval_privacy_free(a, b, out, table, gid++, &prp.aes);
+    hash.put(table, sizeof(block));
+    hash.digest(dig);
+    //TODO 用digest怎么得到原来执行的circuits？
     //record the circuit structure for later verification
-    uint64_t *arr = (uint64_t*) &out;
-    vector<uint64_t > tmp = {arr_a[1], arr_b[1], arr[1], OP_AND};
-    circuits.push_back(tmp);
+//    uint64_t *arr = (uint64_t*) &out;
+//    vector<uint64_t > tmp = {arr_a[1], arr_b[1], arr[1], OP_AND};
+//    circuits.push_back(tmp);
     return out[0];
   }
   block xor_gate(const block& a, const block& b) {
-    //todo record the circuit structure
+    //不用hash
     return xorBlocks(a,b);
   }
   block not_gate(const block& a) {
-    //todo record the circuit structure
+    //不用hash
     return xor_gate(a, public_label(true));
   }
 //  void privacy_free_to_xor(block* new_block, const block * old_block, const bool* b, int length){
@@ -83,7 +93,7 @@ public:
       printf("ALICE/prover party shall not input data.");
       // shared_prg.random_block(label, length);
     } else {
-      ot->recv_rot(label, b, length);
+      ot->recv(label, b, length);
       //TODO call private_label()
     }
   }
@@ -108,14 +118,15 @@ public:
 
   bool verify() {
     io->recv_block(&seed, 1);
+    // TODO use seed to regenerate the labels. BUT:how do we know the number of labels and length for each label?
     // TODO rerun the circuits with labels received.
     // verification
-
-
+    // evaluate全部都完了再rerun
+    // use seed to re-generate labels, length 是使用这个Protocol的人输入的
 
   }
 //TODO modify CircuitFile::compute to rerun the circuits recorded in gc.
-//
+//所有的电路存在gates里面了，wires里存的是线路(输入输出数据)
 //  void compute(block * out, block * in1, block * in2) {
 //    memcpy(wires, in1, n1*sizeof(block));
 //    memcpy(wires+n1, in2, n2*sizeof(block));
