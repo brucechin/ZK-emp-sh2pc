@@ -3,12 +3,9 @@
 #include <emp-tool/emp-tool.h>
 #include <emp-ot/emp-ot.h>
 #include "semihonest_gen.h"
+#include "hash_abandon_io_channel.h"
 namespace emp {
-enum {
-  OP_AND,
-  OP_XOR,
-  OP_NOT
-};
+
 
 template<typename T>
 class ZKPrivacyFreeEva:public CircuitExecution{ public:
@@ -38,16 +35,11 @@ class ZKPrivacyFreeEva:public CircuitExecution{ public:
     uint64_t *arr_a = (uint64_t*) &a;
     uint64_t *arr_b = (uint64_t*) &b;
     block out[2], table[1];
-    io->recv_block(table, 1);
+    io->recv_block(table, 1);//修改IO，让这个send的时候也求一下hash，只求circuits的hash
     //直接hash table
     garble_gate_eval_privacy_free(a, b, out, table, gid++, &prp.aes);
     hash.put(table, sizeof(block));
     hash.digest(dig);
-    //TODO 用digest怎么得到原来执行的circuits？
-    //record the circuit structure for later verification
-//    uint64_t *arr = (uint64_t*) &out;
-//    vector<uint64_t > tmp = {arr_a[1], arr_b[1], arr[1], OP_AND};
-//    circuits.push_back(tmp);
     return out[0];
   }
   block xor_gate(const block& a, const block& b) {
@@ -58,17 +50,17 @@ class ZKPrivacyFreeEva:public CircuitExecution{ public:
     //不用hash
     return xor_gate(a, public_label(true));
   }
-//  void privacy_free_to_xor(block* new_block, const block * old_block, const bool* b, int length){
-//    block h[2];
-//    for(int i = 0; i < length; ++i) {
-//      io->recv_block(h, 2);
-//      if(!b[i]){
-//        new_block[i] = xorBlocks(h[0], prp.H(old_block[i], i));
-//      } else {
-//        new_block[i] = xorBlocks(h[1], prp.H(old_block[i], i));
-//      }
-//    }
-//  }
+  void privacy_free_to_xor(block* new_block, const block * old_block, const bool* b, int length){
+    block h[2];
+    for(int i = 0; i < length; ++i) {
+      io->recv_block(h, 2);
+      if(!b[i]){
+        new_block[i] = xorBlocks(h[0], prp.H(old_block[i], i));
+      } else {
+        new_block[i] = xorBlocks(h[1], prp.H(old_block[i], i));
+      }
+    }
+  }
 };
 
 template<typename IO> class ZKHonestProver : public ProtocolExecution {
@@ -94,55 +86,61 @@ public:
       // shared_prg.random_block(label, length);
     } else {
       ot->recv(label, b, length);
-      //TODO call private_label()
     }
   }
 
-  // run GC and get output. commit it to verifier. output parameter should be
-  // default NULL
-  void commit(block *label, int party, int len, block *output) {
+  //TODO prot_exec call prepareVerify(), however prot_exec was changed during the function. Not sure if this will afect the intermediate execution
+
+  void prepareVerify(int party, int len, block *output) {
     if (party == ALICE) {
       // commit Z'
       c.commit(decom, com, output, sizeof(block));
       io->send_block(&com, sizeof(com));
-
-      // TODO rerun the circuits locally for verification if accept, commit
-      // (reveal, 1), if not abort protocol
-      verify();
-      // after verification, if accept, send decom, if not, abort
-      io->send_block(&decom, sizeof(decom));
-    } else {
-      // BOB does not commit
+      io->recv_block(&seed, 1);
+      HashAbandonIO *hash_abandon_io = new HashAbandonIO();
+      ZKPrivacyFreeGen<HashAbandonIO> *local_gc =
+          new ZKPrivacyFreeGen<HashAbandonIO>(hash_abandon_io);
+      ZKHonestVerifier<HashAbandonIO> *local_verifier =
+          new ZKHonestVerifier<HashAbandonIO>(hash_abandon_io, local_gc);
+      local_verifier->seed = seed;
+      CircuitExecution::circ_exec =
+          local_gc; // replace with locally executed garbled circuits
+      io->recv_block(&local_gc->delta, 1);
+      ProtocolExecution::prot_exec = local_verifier;
+      //the application layer will use this local verifier to rerun the circuits
+    }else{
+      //BOB does nothing
     }
   }
+  /* the application layer looks like
+   * 1. setup semi-honest
+   * 2. run the circuits
+   * 3. save the CircuitExecution::circ_exec and ProtocolExecution::prot_exec
+   * 3. call prepareVerify()
+   * 4. rerun the circuits
+   * 5. call finishVerify()(restore the circ_exec and prot_exec)
+   * */
+  bool finishVerify(CircuitExecution* old_circ_exec, ProtocolExecution* old_prot_exec){
+    //after the application layer rerun the circuits compare the digest
+    auto local_circ = dynamic_cast<ZKPrivacyFreeGen<HashAbandonIO>*>(CircuitExecution::circ_exec);
+    auto old_circ = dynamic_cast<ZKPrivacyFreeGen<HashAbandonIO>*>(old_circ_exec);
 
-  bool verify() {
-    io->recv_block(&seed, 1);
-    // TODO use seed to regenerate the labels. BUT:how do we know the number of labels and length for each label?
-    // TODO rerun the circuits with labels received.
-    // verification
-    // evaluate全部都完了再rerun
-    // use seed to re-generate labels, length 是使用这个Protocol的人输入的
+    //restore the gc and protocol
+    CircuitExecution::circ_exec = old_circ_exec;
+    ProtocolExecution::prot_exec = old_prot_exec;
+    if(strcmp(local_circ->dig, old_circ->dig) == 0){
+      //garble circuits hash digests are the same. pass verification. send the decom
+      io->send_block(&decom, sizeof(decom));
+      return true;
+    }else{
+      return false;
+    }
 
   }
-//TODO modify CircuitFile::compute to rerun the circuits recorded in gc.
-//所有的电路存在gates里面了，wires里存的是线路(输入输出数据)
-//  void compute(block * out, block * in1, block * in2) {
-//    memcpy(wires, in1, n1*sizeof(block));
-//    memcpy(wires+n1, in2, n2*sizeof(block));
-//    for(int i = 0; i < num_gate; ++i) {
-//      if(gates[4*i+3] == AND_GATE) {
-//        wires[gates[4*i+2]] = CircuitExecution::circ_exec->and_gate(wires[gates[4*i]], wires[gates[4*i+1]]);
-//      }
-//      else if (gates[4*i+3] == XOR_GATE) {
-//        wires[gates[4*i+2]] = CircuitExecution::circ_exec->xor_gate(wires[gates[4*i]], wires[gates[4*i+1]]);
-//      }
-//      else
-//        wires[gates[4*i+2]] = CircuitExecution::circ_exec->not_gate(wires[gates[4*i]]);
-//    }
-//    memcpy(out, &wires[num_wire-n3], n3*sizeof(block));
-//  }
-//TODO compare out with output
+
+  void reveal(bool*out, int party, const block *lbls, int nel){
+    //need do nothing
+  }
 };
 }
 
