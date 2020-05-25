@@ -3,12 +3,42 @@ using namespace emp;
 using namespace std;
 
 void test_millionare(int party, int number) {
-	Integer a(32, number, ALICE);
-	Integer b(32, number, BOB);
+	Integer a(32, 100, BOB);
+	Integer b(32, 101, BOB);
+        cout << "input finish\n";
+//	cout << "ALICE Input:\t"<<a.reveal<int>()<<endl;
+//	cout << "BOB Input:\t"<<b.reveal<int>()<<endl;
+//	cout << "ALICE larger?\t"<< (a>b).reveal<bool>()<<endl;
+        Bit res = a>b;
+        ProtocolExecution* old_prot = ProtocolExecution::prot_exec;
+        CircuitExecution* old_circ = CircuitExecution::circ_exec;
+        if(party == ALICE){
+          //PROVER
+            dynamic_cast<ZKHonestProver<NetIO>*>(old_prot)->prepareVerify(party, 1, &res.bit);
+            cout << "a>b start execution!\n";
+            Bit res2 = a>b;
+            cout << "a>b executed!\n";
+            //TODO init another thread to do the local verification phase???
+//            auto local_circ = dynamic_cast<PrivacyFreeGen<HashAbandonIO>*>(CircuitExecution::circ_exec);
+//            auto old_prot_casted = dynamic_cast<ZKHonestProver<NetIO>*>(old_prot);
+//            memcpy(old_prot_casted->verify_dig, local_circ->dig, Hash::DIGEST_SIZE);
+//            CircuitExecution::circ_exec = old_circ;
+//            ProtocolExecution::prot_exec = old_prot;
+            ZKHonestProver<NetIO>::restoreProtAndCirc(old_circ, old_prot);
+            cout << "prot and circ restored!\n";
+            dynamic_cast<ZKHonestProver<NetIO>*>(ProtocolExecution::prot_exec)->finishVerify(party);
 
-	cout << "ALICE Input:\t"<<a.reveal<int>()<<endl;
-	cout << "BOB Input:\t"<<b.reveal<int>()<<endl;
-	cout << "ALICE larger?\t"<< (a>b).reveal<bool>()<<endl;
+        }else{
+          //VERIFIER
+            dynamic_cast<ZKHonestVerifier<NetIO>*>(ProtocolExecution::prot_exec)->prepareVerify(party);
+            if (dynamic_cast<ZKHonestVerifier<NetIO>*>(ProtocolExecution::prot_exec)->finishVerify(party, 1, &res.bit)){
+                cout << "verify success\n";
+            }else{
+                cout << "verify failure\n";
+            }
+        }
+        return;
+
 }
 
 void test_sort(int party) {
@@ -38,6 +68,6 @@ int main(int argc, char** argv) {
 
 	setup_semi_honest(io, party);
 	test_millionare(party, atoi(argv[3]));
-	test_sort(party);
+//	test_sort(party);
 	delete io;
 }
