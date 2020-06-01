@@ -9,7 +9,7 @@ inline void setup_semi_honest(IO* io, int party) {
 	if(party == BOB) {
     PrivacyFreeGen<IO> *t = new PrivacyFreeGen<IO>(io);
     CircuitExecution::circ_exec = t;
-    ProtocolExecution::prot_exec = new ZKHonestVerifier<IO>(io, t);
+    ProtocolExecution::prot_exec = new ZKHonestVerifier<IO>(io, t, false);
   } else {
           PrivacyFreeEva<IO> *t = new PrivacyFreeEva<IO>(io);
           CircuitExecution::circ_exec = t;
